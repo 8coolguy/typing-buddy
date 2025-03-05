@@ -1,0 +1,6 @@
+cmake_minimum_required(VERSION 2.8)
+project( type-buddy )
+find_package( OpenCV REQUIRED )
+include_directories( ${OpenCV_INCLUDE_DIRS} )
+add_executable( type-buddy main.cpp )
+target_link_libraries( type-buddy ${OpenCV_LIBS} )
