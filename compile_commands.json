@@ -1,0 +1,8 @@
+[
+{
+  "directory": "/Users/8coolguy/Documents/GitHub/typing-buddy/build",
+  "command": "/Library/Developer/CommandLineTools/usr/bin/c++  -isystem /usr/local/include/opencv4 -std=gnu++11 -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX15.2.sdk -o CMakeFiles/type-buddy.dir/main.cpp.o -c /Users/8coolguy/Documents/GitHub/typing-buddy/main.cpp",
+  "file": "/Users/8coolguy/Documents/GitHub/typing-buddy/main.cpp",
+  "output": "CMakeFiles/type-buddy.dir/main.cpp.o"
+}
+]
