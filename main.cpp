@@ -8,6 +8,10 @@
 using namespace std;
 /***** Utility Function ******/
 
+#define ERR(msg)        \
+  cout << msg << endl;  \
+  exit(1);              \
+
 void printMatrix(const cv::Mat& image) {
   for (int i = 0; i < image.rows; ++i) {
 		for (int j = 0; j < image.cols; ++j) {
@@ -33,20 +37,24 @@ cv::Mat applyGrayScale(cv::Mat image){
 int main(){
 	cout << "OpenCV version: " << CV_VERSION << endl;
 	cv::VideoCapture cap(0);
-	if(!cap.isOpened()){
-		cerr << "Cannot open camera" << endl;
-		return -1;
-	}
+	cv::Mat ref, frame1, frame2;
+	if(!cap.isOpened()) {ERR("Camera Issue")}
+  cap >> ref;
+  if(ref.empty()) {ERR("Empty Reference Frame")}
+	cv::flip(ref, ref, -1);
+  ref = applyGrayScale(ref);
+  cv::imshow("reference", ref);
 
-	cv::Mat frame1, frame2;
-  cv::Mat lines;
+
 	while(1){
 		cap >> frame1;
-		if(frame1.empty()) break;
-		if(cv::waitKey(1) > 0) break;
+		if(frame1.empty()) {ERR("Empty Frame")}
+		if(cv::waitKey(1) > 0) {break;}
 		cv::flip(frame1, frame2, -1);
 		frame2 = applyGrayScale(frame2);
-    cv::Canny(frame2,frame2, 0, 0, 5, false);
+    cv::absdiff(ref, frame2, frame2);
+    cv::threshold(frame2, frame2, 50.0, 255, cv::THRESH_BINARY);
+    //cv::Sobel(frame2, frame2, CV_16S, 1, 0);
     //vector<cv::Vec4i> lines;
     // Apply Hough Transform
     //HoughLinesP(frame2, lines, 1, CV_PI/180, 100.0, 10, 250);
