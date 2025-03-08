@@ -2,6 +2,7 @@
 #include <opencv2/core.hpp>
 #include <opencv2/core/cvstd_wrapper.hpp>
 #include <opencv2/core/hal/interface.h>
+#include <opencv2/core/types.hpp>
 #include <opencv2/highgui.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc.hpp>
@@ -20,21 +21,24 @@ using namespace std;
 int main(){
 	cout << "OpenCV version: " << CV_VERSION << endl;
 	cv::VideoCapture cap(0);
-	cv::Mat ref, frame1, frame2, edges, eroded;
+	cv::Mat ref, frame1, frame2, edges, eroded, kmeans;
+  vector<vector<cv::Point>> contours;
 	if(!cap.isOpened()) {ERR("Camera Issue")}
   cap >> ref;
   if(ref.empty()) {ERR("Empty Reference Frame")}
 	cv::flip(ref, ref, -1);
-  ref = applyGrayScale(ref);
+  kmeans = applyKmeansClustering(ref, 3);
+  kmeans.convertTo(kmeans, CV_8U);
+  ref = applyGrayScale(kmeans);
   cv::GaussianBlur(ref, ref, cv::Size(GAUS_KSIZE,GAUS_KSIZE), GAUS_THRESHOLD);
-  cv::imshow("ref", ref);
-  /*cv::Canny(ref, edges,)
+  cv::Canny(ref, edges, 65, 130, 5);
+  cv::imshow("canny", edges);
+  //cv::cornerHarris(edges, edges, 31, 17, .05);
+  cv::findContours(edges, contours, RETR_LIST, CHAIN_APPROX_SIMPLE);
+  cv::imshow("canny/hariscorners", edges);
 
-  cv::imshow("contours")
-
-  while(cv::waitKey(1) != 27) //
+  while(cv::waitKey(1) != 27);
   ERR("Breakpoint to find where the keys are");
-  */
 	while(1){
 		cap >> frame1;
 		if(frame1.empty()) {ERR("Empty Frame")}
