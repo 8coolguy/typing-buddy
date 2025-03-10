@@ -6,6 +6,10 @@
 #include <opencv2/core.hpp>
 #include <opencv2/core/mat.hpp>
 
+#define ERR(msg)        \
+  cout << msg << endl;  \
+  exit(1);              \
+
 struct pixel{
 	int pos;
 	float r;

@@ -14,13 +14,15 @@
 using namespace std;
 #define GAUS_THRESHOLD 30.0
 #define GAUS_KSIZE 9
-#define ERR(msg)        \
-  cout << msg << endl;  \
-  exit(1);              \
 
 void on_trackbar(cv::Size size, vector<vector<cv::Point>> contours, vector<cv::Vec4i> hierarchy){
   cv::Mat cnt_img = cv::Mat::zeros(size, CV_8SC3);
-  cv::polylines(cnt_img, contours, true, cv::Scalar(128, 255, 255), 3, cv::LINE_AA);
+  int idx = 0;
+  for( ; idx >= 0; idx = hierarchy[idx][0]){
+    cv::Scalar color( rand()&255, rand()&255, rand()&255 );
+    cv::drawContours(cnt_img, contours, idx, color, cv::FILLED, 8, hierarchy );
+  }
+  //cv::polylines(cnt_img, contours, true, cv::Scalar(128, 255, 255), 3, cv::LINE_AA);
   imshow("contours", cnt_img);
 }
 int main(){
