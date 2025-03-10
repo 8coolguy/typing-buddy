@@ -8,6 +8,7 @@
 #include <opencv2/imgproc.hpp>
 #include <opencv2/video/background_segm.hpp>
 #include <iostream>
+#include <vector>
 
 
 using namespace std;
@@ -17,12 +18,17 @@ using namespace std;
   cout << msg << endl;  \
   exit(1);              \
 
-
+void on_trackbar(cv::Size size, vector<vector<cv::Point>> contours, vector<cv::Vec4i> hierarchy){
+  cv::Mat cnt_img = cv::Mat::zeros(size, CV_8SC3);
+  cv::polylines(cnt_img, contours, true, cv::Scalar(128, 255, 255), 3, cv::LINE_AA);
+  imshow("contours", cnt_img);
+}
 int main(){
 	cout << "OpenCV version: " << CV_VERSION << endl;
 	cv::VideoCapture cap(0);
 	cv::Mat ref, frame1, frame2, edges, eroded, kmeans;
   vector<vector<cv::Point>> contours;
+  vector<cv::Vec4i> hierarchy;
 	if(!cap.isOpened()) {ERR("Camera Issue")}
   cap >> ref;
   if(ref.empty()) {ERR("Empty Reference Frame")}
@@ -33,9 +39,10 @@ int main(){
   cv::GaussianBlur(ref, ref, cv::Size(GAUS_KSIZE,GAUS_KSIZE), GAUS_THRESHOLD);
   cv::Canny(ref, edges, 65, 130, 5);
   cv::imshow("canny", edges);
-  //cv::cornerHarris(edges, edges, 31, 17, .05);
-  cv::findContours(edges, contours, RETR_LIST, CHAIN_APPROX_SIMPLE);
+  cv::findContours(edges, contours, hierarchy, cv::RETR_LIST, cv::CHAIN_APPROX_SIMPLE);
+  cout << contours.size() << endl;
   cv::imshow("canny/hariscorners", edges);
+  on_trackbar(ref.size(), contours, hierarchy);
 
   while(cv::waitKey(1) != 27);
   ERR("Breakpoint to find where the keys are");
