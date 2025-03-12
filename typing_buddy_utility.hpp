@@ -28,5 +28,5 @@ typedef struct centroid centroid;
 void printMatrix(const cv::Mat& image);
 cv::Mat applyGrayScale(cv::Mat image);
 void erosion(cv::InputArray input, cv::OutputArray output, int erosion_type, int kernel_size);
-cv::Mat applyKmeansClustering(cv::Mat image, int k);
+cv::Mat applyKmeansClustering(cv::Mat image, int k, double sigma);
 

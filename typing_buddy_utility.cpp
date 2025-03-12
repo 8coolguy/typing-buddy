@@ -44,7 +44,7 @@ void erosion(cv::InputArray input, cv::OutputArray output, int erosion_type, int
   cv::erode(input, output, element);
 }
 
-cv::Mat applyKmeansClustering(cv::Mat image, int k){
+cv::Mat applyKmeansClustering(cv::Mat image, int k, double sigma){
 	image.convertTo(image, CV_32F);
   std::vector<pixel> pixelList;
   std::vector<centroid> centeroids;
@@ -122,10 +122,9 @@ cv::Mat applyKmeansClustering(cv::Mat image, int k){
 			new_centroids[i].count = 0;
 		}
     std::cout << "iteration: " << iteration << " error: " << error << std::endl;
-		if (error < 0.1) converged = true;
+		if (error < sigma) converged = true;
 		iteration++;
 	}
-  printCentroids(centeroids);
 	//calculate where each pixel belongs to the centroids
 	cv::Mat result(image.size(), image.type());
 	for(int i = 0; i < pixelList.size(); i++){

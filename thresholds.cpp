@@ -41,10 +41,11 @@ int main(){
   cv::VideoCapture cap(0);
 	if(!cap.isOpened()) {ERR("Camera Issue")}
   cap >> reference;
+  //reference = cv::imread("pic.jpg", cv::IMREAD_COLOR);
   if(reference.empty()) {ERR("Empty Reference Frame")}
   size = reference.size();
 	cv::flip(reference, reference, -1);
-  kmeans = applyKmeansClustering(reference, k);
+  kmeans = applyKmeansClustering(reference, k, .1);
   kmeans.convertTo(kmeans, CV_8U);
   gray_scale = applyGrayScale(kmeans);
 
