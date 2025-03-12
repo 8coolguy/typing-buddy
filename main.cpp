@@ -86,8 +86,15 @@ cv::Mat focus_finger_tip(cv::Mat color_image, cv::Size size){
   return color_image;
 }
 
-void applyCalibration(cv::Mat image_with_hands){
-  cout << "Place hands on the five boxes on thre screen." << endl;
+void applyCalibration(cv::Mat image_with_hands, cv::Size size){
+  if(last_mouse_click_x < 0) return;
+  cv::Mat finger_tip(size, image_with_hands.type());
+  for(int row = 0; row < size.height; row++){
+    for(int col = 0; col < size.width; col++){
+      finger_tip.at<cv::Vec3b>(row, col) = image_with_hands.at<cv::Vec3b>(row + last_mouse_click_y, col + last_mouse_click_x);
+    }
+  }
+  findHands(finger_tip);
 
 }
 int main(){
@@ -116,9 +123,9 @@ int main(){
 		if(frame1.empty()) {ERR("Empty Frame")}
 		if(cv::waitKey(1) == 27) {break;}
 		cv::flip(frame1, frame1, -1);
-    findHands(frame1);
     cv:: Mat annotated = focus_finger_tip(frame1, cv::Size(50,50));
     cv::imshow("color_image", annotated);
+    applyCalibration(frame1, cv::Size(50,50));
 
 		frame2 = applyGrayScale(frame1);
     cv::GaussianBlur(frame2, frame2, cv::Size(GAUS_KSIZE,GAUS_KSIZE), GAUS_THRESHOLD);
