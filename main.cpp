@@ -17,6 +17,9 @@ using namespace std;
 #define GAUS_THRESHOLD 10.0
 #define GAUS_KSIZE 5
 
+int last_mouse_click_x = -1;
+int last_mouse_click_y = -1;
+
 void on_trackbar(cv::Size size, vector<vector<cv::Point>> contours, vector<cv::Vec4i> hierarchy){
   cv::Mat cnt_img = cv::Mat::zeros(size, CV_8SC3);
   int idx = 0;
@@ -26,6 +29,12 @@ void on_trackbar(cv::Size size, vector<vector<cv::Point>> contours, vector<cv::V
   }
   //cv::polylines(cnt_img, contours, true, cv::Scalar(128, 255, 255), 3, cv::LINE_AA);
   imshow("contours", cnt_img);
+}
+
+void mouse_callback(int event, int x, int y, int flags, void* u_data){
+  if(0 == event) return;
+  last_mouse_click_y = y;
+  last_mouse_click_x = x;
 }
 
 void findHands(cv::Mat color_image){
@@ -66,9 +75,15 @@ void findHands(cv::Mat color_image){
       cv::Point( bin_w*(i), hist_h - r_hist.at<float>(i) ),
       cv::Scalar( 0, 0, 255), 2, 8, 0 );
   }
-  imshow("color_image", color_image);
   imshow("calcHist", histImage );
+}
 
+cv::Mat focus_finger_tip(cv::Mat color_image, cv::Size size){
+  if(last_mouse_click_x < 0) return color_image;
+  cv::Point pt1(last_mouse_click_x, last_mouse_click_y);
+  cv::Point pt2(last_mouse_click_x + size.width, last_mouse_click_y + size.height);
+  cv::rectangle(color_image, pt1, pt2, cv::Scalar(0, 255, 0), 8, cv::LINE_8, 0);
+  return color_image;
 }
 
 void applyCalibration(cv::Mat image_with_hands){
@@ -81,6 +96,9 @@ int main(){
 	cv::Mat ref, frame1, frame2, edges, eroded, kmeans, blurred;
   vector<vector<cv::Point>> contours;
   vector<cv::Vec4i> hierarchy;
+  cv::namedWindow("color_image");
+
+
 	if(!cap.isOpened()) {ERR("Camera Issue")}
   cap >> ref;
   if(ref.empty()) {ERR("Empty Reference Frame")}
@@ -90,11 +108,8 @@ int main(){
   ref = applyGrayScale(kmeans);
   cv::GaussianBlur(ref, blurred, cv::Size(GAUS_KSIZE,GAUS_KSIZE), GAUS_THRESHOLD);
   cv::Canny(blurred, edges, 30, 200, 5);
-  cv::imshow("canny", edges);
   cv::findContours(edges, contours, hierarchy, cv::RETR_LIST, cv::CHAIN_APPROX_SIMPLE);
-  cout << contours.size() << endl;
-  cv::imshow("canny/hariscorners", edges);
-  on_trackbar(ref.size(), contours, hierarchy);
+  cv::setMouseCallback("color_image", mouse_callback, 0);
 
 	while(1){
 		cap >> frame1;
@@ -102,6 +117,9 @@ int main(){
 		if(cv::waitKey(1) == 27) {break;}
 		cv::flip(frame1, frame1, -1);
     findHands(frame1);
+    cv:: Mat annotated = focus_finger_tip(frame1, cv::Size(50,50));
+    cv::imshow("color_image", annotated);
+
 		frame2 = applyGrayScale(frame1);
     cv::GaussianBlur(frame2, frame2, cv::Size(GAUS_KSIZE,GAUS_KSIZE), GAUS_THRESHOLD);
     erosion(frame2, frame2, cv::MORPH_ELLIPSE, 5);
