@@ -16,6 +16,7 @@
 using namespace std;
 #define GAUS_THRESHOLD 10.0
 #define GAUS_KSIZE 5
+#define CSIZE 50
 
 int last_mouse_click_x = -1;
 int last_mouse_click_y = -1;
@@ -100,38 +101,45 @@ void applyCalibration(cv::Mat image_with_hands, cv::Size size){
 int main(){
 	cout << "OpenCV version: " << CV_VERSION << endl;
 	cv::VideoCapture cap(0);
-	cv::Mat ref, frame1, frame2, edges, eroded, kmeans, blurred;
+	cv::Mat ref, original_frame, annotated_frame, gray_scaled, frame, edges, eroded, kmeans, blurred;
   vector<vector<cv::Point>> contours;
   vector<cv::Vec4i> hierarchy;
   cv::namedWindow("color_image");
 
 
 	if(!cap.isOpened()) {ERR("Camera Issue")}
-  cap >> ref;
-  if(ref.empty()) {ERR("Empty Reference Frame")}
+  while (ref.empty()) cap >> ref;
+
 	cv::flip(ref, ref, -1);
-  kmeans = applyKmeansClustering(ref, 2, .001);
+  kmeans = applyKmeansClustering(ref, 3, .001);
   kmeans.convertTo(kmeans, CV_8U);
+
   ref = applyGrayScale(kmeans);
   cv::GaussianBlur(ref, blurred, cv::Size(GAUS_KSIZE,GAUS_KSIZE), GAUS_THRESHOLD);
   cv::Canny(blurred, edges, 30, 200, 5);
   cv::findContours(edges, contours, hierarchy, cv::RETR_LIST, cv::CHAIN_APPROX_SIMPLE);
   cv::setMouseCallback("color_image", mouse_callback, 0);
 
-	while(1){
-		cap >> frame1;
-		if(frame1.empty()) {ERR("Empty Frame")}
-		if(cv::waitKey(1) == 27) {break;}
-		cv::flip(frame1, frame1, -1);
-    cv:: Mat annotated = focus_finger_tip(frame1, cv::Size(50,50));
-    cv::imshow("color_image", annotated);
-    applyCalibration(frame1, cv::Size(50,50));
+  cv::Size calibration_size(CSIZE, CSIZE);
 
-		frame2 = applyGrayScale(frame1);
-    cv::GaussianBlur(frame2, frame2, cv::Size(GAUS_KSIZE,GAUS_KSIZE), GAUS_THRESHOLD);
-    erosion(frame2, frame2, cv::MORPH_ELLIPSE, 5);
-    cv::absdiff(blurred, frame2, frame2);
-    cv::threshold(frame2, frame2, 30.0, 200.0, cv::THRESH_BINARY);
+	while(1){
+		cap >> original_frame;
+		if(original_frame.empty()) {ERR("Empty Frame")}
+    int keyPress = cv::waitKey(1);
+		if(keyPress == 27) {break;}
+		if(keyPress == 45) {calibration_size.width-=5; calibration_size.height-=5;}
+		if(keyPress == 43) {calibration_size.width+=5; calibration_size.height+=5;}
+    cout << keyPress << endl;
+		cv::flip(original_frame, original_frame, -1);
+    annotated_frame = focus_finger_tip(original_frame, calibration_size);
+    cv::imshow("color_image", annotated_frame);
+    applyCalibration(original_frame, calibration_size);
+
+		gray_scaled = applyGrayScale(original_frame);
+    cv::GaussianBlur(gray_scaled, frame, cv::Size(GAUS_KSIZE,GAUS_KSIZE), GAUS_THRESHOLD);
+    erosion(frame, frame, cv::MORPH_ELLIPSE, 5);
+    cv::absdiff(blurred, frame, frame);
+    cv::threshold(frame, frame, 30.0, 200.0, cv::THRESH_BINARY);
 	}
 
 	cap.release();
