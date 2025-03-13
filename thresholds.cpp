@@ -18,7 +18,7 @@ vector<key> key_vec;
 set<int> box_set;
 
 cv::Size size;
-cv::Mat reference, kmeans, gray_scale, blurred, edges, cnt_img;
+cv::Mat reference, kmeans, gray_scale, blurred, edges, cnt_img, annotated;
 
 int gauss_kernel = 3;
 int k = 3;
@@ -37,6 +37,7 @@ static void trackbar_callback(int pos, void* userdata){
     cv::drawContours(cnt_img, contours, idx, color, cv::FILLED, 8, hierarchy );
   }
   cout << "gauss_thresh: " << gauss_thresh << " gauss_kernel: " << gauss_kernel << " t1: " << canny_t1 << " t2: " << canny_t2 << endl;
+  cv::copyTo(cnt_img, annotated, cv::Mat());
   imshow("reference adjust", cnt_img);
 }
 
@@ -49,12 +50,13 @@ static void mouse_callback(int event, int x, int y, int flags, void*userdata ){
   cv::Mat mask = cv::Mat::zeros(size.height + 2, size.width + 2, CV_8UC1);
   cv::Mat cnt_img8;
   cnt_img.convertTo(cnt_img8, reference.type());
-  int pos = x * size.width + y;
-  if (box_set.find(pos) != box_set.end()) return;
-  int keypress = cv::waitKey(0);
   cv::floodFill(cnt_img8, mask, p, cv::Scalar(255), &box, cv::Scalar(0), cv::Scalar(0), cv::FLOODFILL_MASK_ONLY);
-  cv::rectangle(cnt_img, box, cv::Scalar(255,0,0), 10, cv::LINE_8, 0);
-  cv::imshow("new with rectangle", cnt_img);
+  int pos = box.x * size.width + box.y;
+  if (box_set.find(pos) != box_set.end()) return;
+  cout << "Press a key to register region:" << endl;
+  int keypress = cv::waitKey(0);
+  cv::rectangle(annotated, box, cv::Scalar(255,0,0), 10, cv::LINE_8, 0);
+  cv::imshow("new with rectangle",annotated);
   box_set.insert(pos);
   key_vec.push_back(key({keypress,box}));
   cout << box.x << SPACE << box.y << SPACE << box.height << SPACE << box.width << SPACE << keypress << endl;
