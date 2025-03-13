@@ -5,7 +5,7 @@
 */
 #include <opencv2/core.hpp>
 #include <opencv2/core/mat.hpp>
-
+#define SPACE  " "
 #define ERR(msg)        \
   cout << msg << endl;  \
   exit(1);              \
@@ -22,8 +22,13 @@ struct centroid{
 	float g;
 	float b;
 };
+struct key{
+  int keycode;
+  cv::Rect bounding_box;
+};
 typedef struct pixel pixel;
 typedef struct centroid centroid;
+typedef struct key key;
 
 void printMatrix(const cv::Mat& image);
 cv::Mat applyGrayScale(cv::Mat image);
