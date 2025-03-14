@@ -63,10 +63,10 @@ static void mouse_callback(int event, int x, int y, int flags, void*userdata ){
 }
 
 int main(){
-  //cv::VideoCapture cap(0);
-	//if(!cap.isOpened()) {ERR("Camera Issue")}
-  //cap >> reference;
-  reference = cv::imread("pic.jpg", cv::IMREAD_COLOR);
+  cv::VideoCapture cap(0);
+	if(!cap.isOpened()) {ERR("Camera Issue")}
+  cap >> reference;
+  //reference = cv::imread("pic.jpg", cv::IMREAD_COLOR);
   if(reference.empty()) {ERR("Empty Reference Frame")}
   size = reference.size();
 	cv::flip(reference, reference, -1);
