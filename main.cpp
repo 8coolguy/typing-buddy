@@ -1,8 +1,5 @@
 #include "typing_buddy_utility.hpp"
-#include <algorithm>
 #include <cstdlib>
-#include <limits>
-#include <numeric>
 #include <opencv2/core.hpp>
 #include <opencv2/core/base.hpp>
 #include <opencv2/core/cvstd_wrapper.hpp>
@@ -19,23 +16,14 @@
 
 using namespace std;
 #define GAUS_THRESHOLD 10.0
-#define GAMMA_LEVEL 1.4
+#define GAMMA_LEVEL .4
 #define GAUS_KSIZE 5
 #define CSIZE 50
+#define THRESHOLD 25.0
+#define EROSION_KSIZE 9
 
 int last_mouse_click_x = -1;
 int last_mouse_click_y = -1;
-
-void on_trackbar(cv::Size size, vector<vector<cv::Point>> contours, vector<cv::Vec4i> hierarchy){
-  cv::Mat cnt_img = cv::Mat::zeros(size, CV_8SC3);
-  int idx = 0;
-  for( ; idx >= 0; idx = hierarchy[idx][0]){
-    cv::Scalar color( rand()&255, rand()&255, rand()&255 );
-    cv::drawContours(cnt_img, contours, idx, color, cv::FILLED, 8, hierarchy );
-  }
-  //cv::polylines(cnt_img, contours, true, cv::Scalar(128, 255, 255), 3, cv::LINE_AA);
-  imshow("contours", cnt_img);
-}
 
 void mouse_callback(int event, int x, int y, int flags, void* u_data){
   if(0 == event) return;
@@ -78,7 +66,7 @@ void focus_finger_tip(cv::Mat color_image, cv::Size size){
   cv::Point pt1(last_mouse_click_x, last_mouse_click_y);
   cv::Point pt2(last_mouse_click_x + size.width, last_mouse_click_y + size.height);
   cv::rectangle(color_image, pt1, pt2, cv::Scalar(0, 255, 0), 8, cv::LINE_8, 0);
-  cv::imshow("label", color_image);
+  cv::imshow("color_image", color_image);
 }
 
 void createHistogram(cv::Mat color_image){
@@ -134,46 +122,44 @@ cv::Mat create_finger_histogram(cv::Mat original_frame, cv::Size size){
   int channels[] = {0 ,1};
   int hbins = 30, sbins = 32;
   int hist_size[] = {hbins, sbins};
-  // hue varies from 0 to 179, see cvtColor
-  float hranges[] = { 0, 180 };
-  // saturation varies from 0 (black-gray-white) to
-  // 255 (pure spectrum color)
+  float hranges[] = { 0, 180};
   float sranges[] = { 0, 256 };
   const float* ranges[] = { hranges, sranges };
   cv::calcHist(&finger_hist, 1, channels, cv::Mat(), hist, 2, hist_size, ranges, true, false);
   cv::normalize(hist, hist, 0, 255, cv::NORM_MINMAX);
-
   return hist;
 }
 
 cv::Mat finger_mask(cv::Mat original_frame, cv::Mat hist){
   cv::Mat hsv_image, backproject, output;
   int channels[] = {0 ,1};
-  float hranges[] = { 0, 180 };
+  float hranges[] = { 0, 180};
   float sranges[] = { 0, 256 };
   const float* ranges[] = { hranges, sranges };
   cv::cvtColor(original_frame, hsv_image, cv::COLOR_RGB2HSV);
   cv::calcBackProject(&original_frame, 1, channels, hist, backproject, ranges, 1);
   cv::Mat shp = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(9,9));
   cv::filter2D(backproject, backproject,-1, shp);
-  //double threshold = cv::threshold(backproject, backproject, 20, 240, cv::THRESH_BINARY);
-  //cv::bitwise_and(original_frame, backproject, output);
+  double threshold = cv::threshold(backproject, backproject, 30, 240, cv::THRESH_BINARY);
+  cv::imshow("image", backproject);
+  cv::imshow("hsv", backproject);
   return backproject;
 }
 
-void applyCalibration(cv::Mat image_with_hands, cv::Size size){
-  if(last_mouse_click_x < 0) return;
+cv::Mat applyCalibration(cv::Mat image_with_hands, cv::Size size){
+  if(last_mouse_click_x < 0) return cv::Mat();
   cv::Mat finger_tip(size, image_with_hands.type()), hsv_image;
   for(int row = 0; row < size.height; row++){
     for(int col = 0; col < size.width; col++){
       finger_tip.at<cv::Vec3b>(row, col) = image_with_hands.at<cv::Vec3b>(row + last_mouse_click_y, col + last_mouse_click_x);
     }
   }
-  //cv::cvtColor(image_with_hands, hsv_image, cv::COLOR_RGB2HSV);
-  createHistogram(finger_tip);
+  //createHistogram(finger_tip);
   cv::Mat hand_hist = create_finger_histogram(image_with_hands, size);
   cv::Mat mask = finger_mask(image_with_hands, hand_hist); 
-  cv::imshow("masked", mask);
+  
+  return mask;
+
 }
 
 cv::Mat preprocess(cv::Mat frame){
@@ -185,10 +171,9 @@ cv::Mat preprocess(cv::Mat frame){
 
 cv::Mat isolate_hands(cv::Mat reference, cv::Mat frame){
   cv::absdiff(frame, reference, frame);
-  cv::threshold(frame, frame, 30.0, 255.0, cv::THRESH_BINARY);
-  erosion(frame, frame, cv::MORPH_ELLIPSE, 9);
+  cv::threshold(frame, frame, THRESHOLD, 255.0, cv::THRESH_BINARY);
+  erosion(frame, frame, cv::MORPH_ELLIPSE, EROSION_KSIZE);
   return frame;
-  
 }
 
 int main(){
@@ -218,15 +203,14 @@ int main(){
 		if(keyPress == 43) {calibration_size.width+=5; calibration_size.height+=5;}
 		cv::flip(original_frame, original_frame, -1);
     gamma_adjusted = preprocess(original_frame);
-
+    cv::imshow("color_image", original_frame);
     mask = isolate_hands(gamma_adjusted_ref, gamma_adjusted);
     cv::copyTo(original_frame, annotated_frame, mask);
-    cv::imshow("annotated", annotated_frame);
-    cv::imshow("color_image", original_frame);
-    /*
-    focus_finger_tip(original_frame, calibration_size);
-    applyCalibration(annotated_frame, calibration_size);
-    */
+    cv::bitwise_and(original_frame, original_frame, annotated_frame, mask);
+    cv::imshow("annotated_frame", annotated_frame);
+    focus_finger_tip(annotated_frame, calibration_size); //creates rectangle;
+    cv::Mat calibrated = applyCalibration(annotated_frame, calibration_size);
+    //cv::imshow("calibrated", calibrated);
     annotated_frame = cv::Mat();
 	}
 	cap.release();
