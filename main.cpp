@@ -13,6 +13,7 @@
 #include <iostream>
 #include <vector>
 #include <set>
+#include <map>
 
 
 using namespace std;
@@ -22,13 +23,42 @@ using namespace std;
 #define CSIZE 50
 #define THRESHOLD 25.0
 #define EROSION_KSIZE 9
-
+string quote = "with year know since about follow think after head school shes plan under many small present such against now when much before home present";
 int last_mouse_click_x = -1;
 int last_mouse_click_y = -1;
 bool clicked = false;
 vector<key> key_vec;
 set<int> box_set;
 cv::Mat cnt_img, original_frame, annotated,labeled;
+
+map<char, int> keyToFinger = {
+    {'a', 0},
+    {'q', 0},
+    {'z', 0},
+    {'w', 1},
+    {'s', 1},
+    {'x', 1},
+    {'e', 2},
+    {'d', 2},
+    {'c', 2},
+    {'r', 3},
+    {'f', 3},
+    {'v', 3},
+    {'t', 3},
+    {'g', 3},
+    {'b', 3},
+    {'y', 4},
+    {'h', 4},
+    {'n', 4},
+    {'u', 4},
+    {'j', 4},
+    {'m', 4},
+    {'i', 5},
+    {'k', 5},
+    {'o', 6},
+    {'l', 6},
+    {'p', 7},
+};
 
 void mouse_callback(int event, int x, int y, int flags, void* u_data){
   if(clicked && event != cv::EVENT_FLAG_LBUTTON) return;
@@ -197,7 +227,9 @@ cv::Mat isolate_hands(cv::Mat reference, cv::Mat frame){
   erosion(frame, frame, cv::MORPH_ELLIPSE, EROSION_KSIZE);
   return frame;
 }
-
+int determine_finger(){
+  return rand() % 8;
+}
 int main(){
 	cout << "OpenCV version: " << CV_VERSION << endl;
 	cv::VideoCapture cap(0);
@@ -250,12 +282,20 @@ int main(){
   printMatrix(hand_hist);
 
   keypress = -1;
+  string typed;
+  int typed_index = 0;
   cout << "Analysing Typing" << endl;
+  cv::Mat game_screen = cv::Mat::zeros(cv::Size(1920,1080), CV_8UC3);
+  cv::putText(game_screen, "Type: " + quote, cv::Point(50,100), cv::FONT_HERSHEY_PLAIN, 1.0, cv::Scalar(255, 255, 255), 2);
+  cv::imshow("display", game_screen);
+  int total = 0;
+  int correct = 0;
 	while(1){
+    keypress = cv::waitKey(0);
 		cap >> original_frame;
-		if(original_frame.empty()) {ERR("Empty Frame")}
 		if(keypress == 27) {break;}
-    keypress = cv::waitKey(1);
+    if(typed_index > quote.size()) break;
+		if(original_frame.empty()) {ERR("Empty Frame")}
 		cv::flip(original_frame, original_frame, -1);
     gamma_adjusted = preprocess(original_frame);
     mask = isolate_hands(gamma_adjusted_ref, gamma_adjusted);
@@ -265,8 +305,24 @@ int main(){
     cv::bitwise_and(original_frame, original_frame, annotated_frame, mask2);
     cv::imshow("mask2", mask2);
     cv::imshow("annotated_frame", annotated_frame);
+    cv::imshow("original_frame", original_frame);
+    int finger_id = determine_finger();
+    if(quote[typed_index] == keypress){
+      typed += quote[typed_index];
+      if(finger_id == keyToFinger[quote[typed_index]]){
+        correct++;
+      }
+      total++;
+      typed_index++;
+    }
+    cv::putText(game_screen, "Type: " + quote, cv::Point(50,100), cv::FONT_HERSHEY_PLAIN, 1.0, cv::Scalar(255, 255, 255), 2);
+    cv::putText(game_screen, "Typed: "+typed, cv::Point(50,150), cv::FONT_HERSHEY_PLAIN, 1.0, cv::Scalar(255, 255, 255), 2);
+    cv::putText(game_screen, to_string(correct) +  "/" + to_string(total), cv::Point(50,170), cv::FONT_HERSHEY_PLAIN, 1.0, cv::Scalar(255, 255, 255), 2);
+    cv::imshow("display", game_screen);
     annotated_frame = cv::Mat();
+    game_screen = cv::Mat::zeros(cv::Size(1920,1080), CV_8UC3);
 	}
+  cout << "Your typing score was " << correct << "/" << total << endl;
 	cap.release();
 	cv::destroyAllWindows();
 	return 0;
