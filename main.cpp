@@ -12,6 +12,7 @@
 #include <opencv2/video/background_segm.hpp>
 #include <iostream>
 #include <vector>
+#include <set>
 
 
 using namespace std;
@@ -25,11 +26,35 @@ using namespace std;
 int last_mouse_click_x = -1;
 int last_mouse_click_y = -1;
 bool clicked = false;
+vector<key> key_vec;
+set<int> box_set;
+cv::Mat cnt_img, original_frame, annotated,labeled;
 
 void mouse_callback(int event, int x, int y, int flags, void* u_data){
   if(clicked && event != cv::EVENT_FLAG_LBUTTON) return;
   last_mouse_click_y = y;
   last_mouse_click_x = x;
+}
+
+static void mouse_box_callback(int event, int x, int y, int flags, void*userdata ){
+  if(event != cv::EVENT_FLAG_RBUTTON) return;
+  cv::Size size = cnt_img.size();
+  if(x > size.width || y > size.height) return;
+  cv::Point p(x,y);
+  cv::Rect box;
+  cv::Mat cnt_img8;
+  cv::Mat mask = cv::Mat::zeros(size.height + 2, size.width + 2, CV_8UC1);
+  cnt_img.convertTo(cnt_img8, original_frame.type());
+  cv::floodFill(cnt_img8, mask, p, cv::Scalar(255), &box, cv::Scalar(0), cv::Scalar(0), cv::FLOODFILL_MASK_ONLY);
+  int pos = box.x * size.width + box.y;
+  if (box_set.find(pos) != box_set.end()) return;
+  cout << "Press a key to register region:" << endl;
+  int keypress = cv::waitKey(0);
+  cv::rectangle(labeled, box, cv::Scalar(255,0,0), 10, cv::LINE_8, 0);
+  cv::imshow("labeled",labeled);
+  box_set.insert(pos);
+  key_vec.push_back(key({keypress,box}));
+  cout << box.x << SPACE << box.y << SPACE << box.height << SPACE << box.width << SPACE << keypress << endl;
 }
 
 cv::Mat adjustGamma(cv::Mat input, double gamma){
@@ -125,18 +150,20 @@ cv::Mat create_finger_histogram(cv::Mat original_frame, cv::Size size){
   if(last_mouse_click_x < 0) return cv::Mat();
   cv::Mat hsv_image, hist;
   cv::cvtColor(original_frame, hsv_image, cv::COLOR_RGB2HSV);
+  cv::imshow("hsv_image", hsv_image);
   cv::Mat finger_hist(size, hsv_image.type());
   //copy image square to box
   for(int row = 0; row < size.height; row++)
     for(int col = 0; col < size.width; col++)
       finger_hist.at<cv::Vec3b>(row, col) = original_frame.at<cv::Vec3b>(row + last_mouse_click_y, col + last_mouse_click_x);
   //FROM opencv documentation:
-  int channels[] = {0 ,1};
-  int hbins = 30, sbins = 32;
-  int hist_size[] = {hbins, sbins};
+  int channels[] = {0 ,1, 2};
+  int hbins = 15, sbins = 16, vbins = 10;
+  int hist_size[] = {hbins, sbins, vbins};
   float hranges[] = { 0, 180};
   float sranges[] = { 0, 256 };
-  const float* ranges[] = { hranges, sranges };
+  float vranges[] = {0, 100};
+  const float* ranges[] = { hranges, sranges , vranges};
   cv::calcHist(&finger_hist, 1, channels, cv::Mat(), hist, 2, hist_size, ranges, true, false);
   cv::normalize(hist, hist, 0, 255, cv::NORM_MINMAX);
   return hist;
@@ -144,28 +171,17 @@ cv::Mat create_finger_histogram(cv::Mat original_frame, cv::Size size){
 
 cv::Mat finger_mask(cv::Mat original_frame, cv::Mat hist){
   cv::Mat hsv_image, backproject, output;
-  int channels[] = {0 ,1};
+  int channels[] = {0 ,1, 2};
   float hranges[] = { 0, 180};
   float sranges[] = { 0, 256 };
-  const float* ranges[] = { hranges, sranges };
+  float vranges[] = {0, 100};
+  const float* ranges[] = { hranges, sranges , vranges};
   cv::cvtColor(original_frame, hsv_image, cv::COLOR_RGB2HSV);
   cv::calcBackProject(&original_frame, 1, channels, hist, backproject, ranges, 1);
   cv::Mat shp = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(9,9));
   cv::filter2D(backproject, backproject,-1, shp);
-  double threshold = cv::threshold(backproject, backproject, 30, 240, cv::THRESH_BINARY);
+  double threshold = cv::threshold(backproject, backproject, 20, 255, cv::THRESH_BINARY);
   return backproject;
-}
-
-
-cv::Mat applyCalibration(cv::Mat image_with_hands, cv::Size size){
-  if(last_mouse_click_x < 0) return cv::Mat();
-  /*
-  cv::Mat finger_tip = extract_finger(image_with_hands, size);
-  createHistogram(finger_tip);
-  */
-  cv::Mat hand_hist = create_finger_histogram(image_with_hands, size);
-  cv::Mat mask = finger_mask(image_with_hands, hand_hist); 
-  return mask;
 }
 
 cv::Mat preprocess(cv::Mat frame){
@@ -185,9 +201,11 @@ cv::Mat isolate_hands(cv::Mat reference, cv::Mat frame){
 int main(){
 	cout << "OpenCV version: " << CV_VERSION << endl;
 	cv::VideoCapture cap(0);
-	cv::Mat ref, original_frame, annotated_frame, gray_scaled, frame, edges, eroded, kmeans, blurred, gamma_adjusted, gamma_adjusted_ref, mask;
+	cv::Mat ref, annotated_frame, gray_scaled, frame, edges, eroded, kmeans, blurred, gamma_adjusted, gamma_adjusted_ref, mask, kmeans_gray_scaled;
   vector<vector<cv::Point>> contours;
   vector<cv::Vec4i> hierarchy;
+  vector<key> key_vec;
+  set<int> box_set;
   cv::Size calibration_size(CSIZE, CSIZE);
   cv::namedWindow("color_image");
 
@@ -195,10 +213,22 @@ int main(){
 	if(!cap.isOpened()) {ERR("Camera Issue")}
   while (ref.empty()) cap >> ref;
 	cv::flip(ref, ref, -1);
-  gamma_adjusted_ref = preprocess(ref);
+  cv::copyTo(ref, labeled, cv::Mat());
+  kmeans = applyKmeansClustering(ref, 3, .1);
+  kmeans.convertTo(kmeans, CV_8U);
+  gamma_adjusted_ref = preprocess(kmeans);
+  cv::findContours(edges, contours, hierarchy, cv::RETR_LIST, cv::CHAIN_APPROX_SIMPLE);
 
   cv::Canny(gamma_adjusted_ref, edges, 30, 200, 5);
   cv::findContours(edges, contours, hierarchy, cv::RETR_LIST, cv::CHAIN_APPROX_SIMPLE);
+  cnt_img = cv::Mat::zeros(ref.size(), CV_8SC3);
+  for(int idx = 0 ; idx >= 0; idx = hierarchy[idx][0]){
+    cv::Scalar color(255, 255, 255);
+    cv::drawContours(cnt_img, contours, idx, color, cv::FILLED, 8, hierarchy );
+  }
+  cv::imshow("cnt_img", cnt_img);
+  cv::setMouseCallback("cnt_img", mouse_box_callback, 0);
+  cv::waitKey(0);
   cv::setMouseCallback("color_image", mouse_callback, 0);
 
   int keypress = cv::waitKey(1);
@@ -225,8 +255,6 @@ int main(){
 		cap >> original_frame;
 		if(original_frame.empty()) {ERR("Empty Frame")}
 		if(keypress == 27) {break;}
-		if(keypress == 45) {calibration_size.width-=5; calibration_size.height-=5;}
-		if(keypress == 43) {calibration_size.width+=5; calibration_size.height+=5;}
     keypress = cv::waitKey(1);
 		cv::flip(original_frame, original_frame, -1);
     gamma_adjusted = preprocess(original_frame);
@@ -235,7 +263,7 @@ int main(){
     cv::Mat mask2 = finger_mask(original_frame, hand_hist); 
     erosion(mask2, mask2, cv::MORPH_ELLIPSE, 19);
     cv::bitwise_and(original_frame, original_frame, annotated_frame, mask2);
-    cv::imshow("calibrated", mask2);
+    cv::imshow("mask2", mask2);
     cv::imshow("annotated_frame", annotated_frame);
     annotated_frame = cv::Mat();
 	}

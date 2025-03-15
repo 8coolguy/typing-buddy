@@ -31,12 +31,10 @@ static void trackbar_callback(int pos, void* userdata){
   cv::Canny(blurred, edges, canny_t1*10.0, canny_t2*10.0, 5);
   cv::findContours(edges, contours, hierarchy, cv::RETR_LIST, cv::CHAIN_APPROX_SIMPLE);
   cnt_img = cv::Mat::zeros(size, CV_8SC3);
-  int idx = 0;
-  for( ; idx >= 0; idx = hierarchy[idx][0]){
-    cv::Scalar color(128, 255, 255);
+  for(int idx = 0 ; idx >= 0; idx = hierarchy[idx][0]){
+    cv::Scalar color(255, 255, 255);
     cv::drawContours(cnt_img, contours, idx, color, cv::FILLED, 8, hierarchy );
   }
-  cout << "gauss_thresh: " << gauss_thresh << " gauss_kernel: " << gauss_kernel << " t1: " << canny_t1 << " t2: " << canny_t2 << endl;
   cv::copyTo(cnt_img, annotated, cv::Mat());
   imshow("reference adjust", cnt_img);
 }
