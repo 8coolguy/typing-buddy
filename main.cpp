@@ -24,9 +24,10 @@ using namespace std;
 
 int last_mouse_click_x = -1;
 int last_mouse_click_y = -1;
+bool clicked = false;
 
 void mouse_callback(int event, int x, int y, int flags, void* u_data){
-  if(0 == event) return;
+  if(clicked && event != cv::EVENT_FLAG_LBUTTON) return;
   last_mouse_click_y = y;
   last_mouse_click_x = x;
 }
@@ -110,7 +111,18 @@ void createHistogram(cv::Mat color_image){
   imshow("calcHist", histImage );
 }
 
+cv::Mat extract_finger(cv::Mat image_with_hands, cv::Size size){
+  cv::Mat finger_tip(size, image_with_hands.type());
+  for(int row = 0; row < size.height; row++){
+    for(int col = 0; col < size.width; col++){
+      finger_tip.at<cv::Vec3b>(row, col) = image_with_hands.at<cv::Vec3b>(row + last_mouse_click_y, col + last_mouse_click_x);
+    }
+  }
+  return finger_tip;
+}
+
 cv::Mat create_finger_histogram(cv::Mat original_frame, cv::Size size){
+  if(last_mouse_click_x < 0) return cv::Mat();
   cv::Mat hsv_image, hist;
   cv::cvtColor(original_frame, hsv_image, cv::COLOR_RGB2HSV);
   cv::Mat finger_hist(size, hsv_image.type());
@@ -141,25 +153,19 @@ cv::Mat finger_mask(cv::Mat original_frame, cv::Mat hist){
   cv::Mat shp = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(9,9));
   cv::filter2D(backproject, backproject,-1, shp);
   double threshold = cv::threshold(backproject, backproject, 30, 240, cv::THRESH_BINARY);
-  cv::imshow("image", backproject);
-  cv::imshow("hsv", backproject);
   return backproject;
 }
 
+
 cv::Mat applyCalibration(cv::Mat image_with_hands, cv::Size size){
   if(last_mouse_click_x < 0) return cv::Mat();
-  cv::Mat finger_tip(size, image_with_hands.type()), hsv_image;
-  for(int row = 0; row < size.height; row++){
-    for(int col = 0; col < size.width; col++){
-      finger_tip.at<cv::Vec3b>(row, col) = image_with_hands.at<cv::Vec3b>(row + last_mouse_click_y, col + last_mouse_click_x);
-    }
-  }
-  //createHistogram(finger_tip);
+  /*
+  cv::Mat finger_tip = extract_finger(image_with_hands, size);
+  createHistogram(finger_tip);
+  */
   cv::Mat hand_hist = create_finger_histogram(image_with_hands, size);
   cv::Mat mask = finger_mask(image_with_hands, hand_hist); 
-  
   return mask;
-
 }
 
 cv::Mat preprocess(cv::Mat frame){
@@ -194,23 +200,43 @@ int main(){
   cv::Canny(gamma_adjusted_ref, edges, 30, 200, 5);
   cv::findContours(edges, contours, hierarchy, cv::RETR_LIST, cv::CHAIN_APPROX_SIMPLE);
   cv::setMouseCallback("color_image", mouse_callback, 0);
+
+  int keypress = cv::waitKey(1);
+  cv::Mat hand_hist;
+  cout << "Click once to record color of finger tips and click eso to finish recording." << endl;
+  while(keypress != 27){
+    cap >> original_frame;
+		if(original_frame.empty()) {ERR("Empty Frame")}
+    cv::flip(original_frame, original_frame, -1);
+		if(keypress == 45) {calibration_size.width-=5; calibration_size.height-=5;}
+		if(keypress == 43) {calibration_size.width+=5; calibration_size.height+=5;}
+    cv::imshow("color_image", original_frame);
+    focus_finger_tip(original_frame, calibration_size);
+    hand_hist = create_finger_histogram(original_frame, calibration_size);
+    keypress = cv::waitKey(1);
+    clicked = true;
+  }
+  cout << "Finished Calibration" << endl;
+  printMatrix(hand_hist);
+
+  keypress = -1;
+  cout << "Analysing Typing" << endl;
 	while(1){
 		cap >> original_frame;
 		if(original_frame.empty()) {ERR("Empty Frame")}
-    int keyPress = cv::waitKey(1);
-		if(keyPress == 27) {break;}
-		if(keyPress == 45) {calibration_size.width-=5; calibration_size.height-=5;}
-		if(keyPress == 43) {calibration_size.width+=5; calibration_size.height+=5;}
+		if(keypress == 27) {break;}
+		if(keypress == 45) {calibration_size.width-=5; calibration_size.height-=5;}
+		if(keypress == 43) {calibration_size.width+=5; calibration_size.height+=5;}
+    keypress = cv::waitKey(1);
 		cv::flip(original_frame, original_frame, -1);
     gamma_adjusted = preprocess(original_frame);
-    cv::imshow("color_image", original_frame);
     mask = isolate_hands(gamma_adjusted_ref, gamma_adjusted);
     cv::copyTo(original_frame, annotated_frame, mask);
-    cv::bitwise_and(original_frame, original_frame, annotated_frame, mask);
+    cv::Mat mask2 = finger_mask(original_frame, hand_hist); 
+    erosion(mask2, mask2, cv::MORPH_ELLIPSE, 19);
+    cv::bitwise_and(original_frame, original_frame, annotated_frame, mask2);
+    cv::imshow("calibrated", mask2);
     cv::imshow("annotated_frame", annotated_frame);
-    focus_finger_tip(annotated_frame, calibration_size); //creates rectangle;
-    cv::Mat calibrated = applyCalibration(annotated_frame, calibration_size);
-    //cv::imshow("calibrated", calibrated);
     annotated_frame = cv::Mat();
 	}
 	cap.release();
