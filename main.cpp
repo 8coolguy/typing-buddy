@@ -1,5 +1,4 @@
 #include "typing_buddy_utility.hpp"
-#include <cstdlib>
 #include <opencv2/core.hpp>
 #include <opencv2/core/base.hpp>
 #include <opencv2/core/cvstd_wrapper.hpp>
@@ -14,6 +13,8 @@
 #include <vector>
 #include <set>
 #include <map>
+#include <cstdlib>
+#include <chrono>
 
 
 using namespace std;
@@ -30,6 +31,7 @@ bool clicked = false;
 vector<key> key_vec;
 set<int> box_set;
 cv::Mat cnt_img, original_frame, annotated,labeled;
+
 
 map<char, int> keyToFinger = {
     {'a', 0},
@@ -259,7 +261,8 @@ int main(){
     cv::drawContours(cnt_img, contours, idx, color, cv::FILLED, 8, hierarchy );
   }
   cv::imshow("cnt_img", cnt_img);
-  cv::setMouseCallback("cnt_img", mouse_box_callback, 0);
+  cv::imshow("labeled", cnt_img);
+  cv::setMouseCallback("labeled", mouse_box_callback, 0);
   cv::waitKey(0);
   cv::setMouseCallback("color_image", mouse_callback, 0);
 
@@ -288,10 +291,12 @@ int main(){
   cv::Mat game_screen = cv::Mat::zeros(cv::Size(1920,1080), CV_8UC3);
   cv::putText(game_screen, "Type: " + quote, cv::Point(50,100), cv::FONT_HERSHEY_PLAIN, 1.0, cv::Scalar(255, 255, 255), 2);
   cv::imshow("display", game_screen);
+  int total_inference_time = 0;
   int total = 0;
   int correct = 0;
 	while(1){
     keypress = cv::waitKey(0);
+    chrono::steady_clock::time_point begin = chrono::steady_clock::now();
 		cap >> original_frame;
 		if(keypress == 27) {break;}
     if(typed_index > quote.size()) break;
@@ -314,6 +319,8 @@ int main(){
       }
       total++;
       typed_index++;
+      chrono::steady_clock::time_point end = chrono::steady_clock::now();
+      total_inference_time += chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
     }
     cv::putText(game_screen, "Type: " + quote, cv::Point(50,100), cv::FONT_HERSHEY_PLAIN, 1.0, cv::Scalar(255, 255, 255), 2);
     cv::putText(game_screen, "Typed: "+typed, cv::Point(50,150), cv::FONT_HERSHEY_PLAIN, 1.0, cv::Scalar(255, 255, 255), 2);
@@ -321,8 +328,11 @@ int main(){
     cv::imshow("display", game_screen);
     annotated_frame = cv::Mat();
     game_screen = cv::Mat::zeros(cv::Size(1920,1080), CV_8UC3);
+
 	}
   cout << "Your typing score was " << correct << "/" << total << endl;
+  cout << "Total Inference Time: " << total_inference_time << endl;
+  cout << "Avg. Inference Time: " << total_inference_time/total << endl;
 	cap.release();
 	cv::destroyAllWindows();
 	return 0;
