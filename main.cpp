@@ -10,6 +10,7 @@
 #include <opencv2/imgproc.hpp>
 #include <opencv2/video/background_segm.hpp>
 #include <iostream>
+#include <string>
 #include <vector>
 #include <set>
 #include <map>
@@ -229,8 +230,79 @@ cv::Mat isolate_hands(cv::Mat reference, cv::Mat frame){
   erosion(frame, frame, cv::MORPH_ELLIPSE, EROSION_KSIZE);
   return frame;
 }
-int determine_finger(){
-  return rand() % 8;
+
+
+
+
+// Helper function to check if two rectangles are close enough
+bool areRectsClose(const cv::Rect& r1, const cv::Rect& r2, int distanceThreshold) {
+    return (abs(r1.x - r2.x) < distanceThreshold && abs(r1.y - r2.y) < distanceThreshold);
+}
+
+int determine_finger(const cv::Mat& inputImage, int keycode, int minSize, int maxSize, int mergeDistance, bool drawBlobs = true) {
+    // Find contours
+    vector<vector<cv::Point>> contours;
+    vector<cv::Vec4i> hierarchy;
+    cv::findContours(inputImage, contours, hierarchy, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+
+    // Store merged contours
+    vector<cv::Rect> mergedBlobs;
+
+    // Process contours and merge nearby ones
+    for (const auto& contour : contours) {
+        cv::Rect bbox = cv::boundingRect(contour);
+        int area = bbox.width * bbox.height;
+
+        // Filter out small or large blobs
+        if (area < minSize || area > maxSize) continue;
+
+        bool merged = false;
+        for (auto& existing : mergedBlobs) {
+            if (areRectsClose(existing, bbox, mergeDistance)) {
+                // Expand existing bounding box to include the new one
+                existing = existing | bbox; // Merges rectangles
+                merged = true;
+                break;
+            }
+        }
+
+        if (!merged) {
+            mergedBlobs.push_back(bbox);
+        }
+    }
+
+    // Sort blobs from left to right
+    sort(mergedBlobs.begin(), mergedBlobs.end(), [](const cv::Rect& a, const cv::Rect& b) {
+        return a.x < b.x;
+    });
+
+    // Draw blobs if required
+  int key_box = -1;
+  for(size_t i = 0; i < key_vec.size(); i++){
+    if(key_vec[i].keycode == keycode){
+      key_box = i;
+      break;
+    }
+  }
+  if (key_box == -1) return 0;
+  if (drawBlobs) {
+    cv::Mat output;
+    cv::cvtColor(inputImage, output, cv::COLOR_GRAY2BGR); // Convert to color
+    for (size_t i = 0; i < mergedBlobs.size(); i++) {
+        cv::rectangle(output, mergedBlobs[i], cv::Scalar(0, 255, 0), 2); // Draw bounding box
+        cv::putText(output, std::to_string(i + 1), 
+                    cv::Point(mergedBlobs[i].x, mergedBlobs[i].y - 5), 
+                    cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(0, 0, 255), 2);
+    }
+    cv::rectangle(output, key_vec[key_box].bounding_box, cv::Scalar(0, 255, 0), 2); // Draw bounding box
+    cv::putText(output, to_string(keycode), cv::Point(key_vec[key_box].bounding_box.x, key_vec[key_box].bounding_box.y - 5), cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(0, 0, 255), 2);
+    cv::imshow("Merged Blobs", output);
+  }
+  for (size_t i = 0; i < mergedBlobs.size(); i++) {
+    cv::Rect intersection = mergedBlobs[i] & key_vec.at(key_box).bounding_box;
+    if(intersection.area() > 0) return i;
+  }
+  return mergedBlobs.size() % 8; // Return the number of merged blobs
 }
 int main(){
 	cout << "OpenCV version: " << CV_VERSION << endl;
@@ -251,7 +323,6 @@ int main(){
   kmeans = applyKmeansClustering(ref, 3, .1);
   kmeans.convertTo(kmeans, CV_8U);
   gamma_adjusted_ref = preprocess(kmeans);
-  cv::findContours(edges, contours, hierarchy, cv::RETR_LIST, cv::CHAIN_APPROX_SIMPLE);
 
   cv::Canny(gamma_adjusted_ref, edges, 30, 200, 5);
   cv::findContours(edges, contours, hierarchy, cv::RETR_LIST, cv::CHAIN_APPROX_SIMPLE);
@@ -263,7 +334,7 @@ int main(){
   cv::imshow("cnt_img", cnt_img);
   cv::imshow("labeled", cnt_img);
   cv::setMouseCallback("labeled", mouse_box_callback, 0);
-  cv::waitKey(0);
+  //cv::waitKey(0);
   cv::setMouseCallback("color_image", mouse_callback, 0);
 
   int keypress = cv::waitKey(1);
@@ -311,7 +382,9 @@ int main(){
     cv::imshow("mask2", mask2);
     cv::imshow("annotated_frame", annotated_frame);
     cv::imshow("original_frame", original_frame);
-    int finger_id = determine_finger();
+    int finger_id = determine_finger(mask2, keypress, 50, 1000000, 150, true);
+    cout << "Number of blobs " << finger_id << endl;
+    finger_id = finger_id % 8;
     if(quote[typed_index] == keypress){
       typed += quote[typed_index];
       if(finger_id == keyToFinger[quote[typed_index]]){
