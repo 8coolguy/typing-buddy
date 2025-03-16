@@ -69,6 +69,27 @@ void mouse_callback(int event, int x, int y, int flags, void* u_data){
   last_mouse_click_x = x;
 }
 
+string print_finger(int finger_id){
+  if(finger_id == 0){
+    return "left pinkie";
+  } else if(finger_id == 1){
+    return "left ring";
+  } else if(finger_id == 2){
+    return "left middle";
+  } else if(finger_id == 3){
+    return "left index";
+  } else if(finger_id == 4){
+    return "right index";
+  } else if(finger_id == 5){
+    return "right middle";
+  } else if(finger_id == 6){
+    return "right ring";
+  } else if(finger_id == 7){
+    return "right pinkie";
+  }
+  return "not a finger";
+}
+
 static void mouse_box_callback(int event, int x, int y, int flags, void*userdata ){
   if(event != cv::EVENT_FLAG_RBUTTON) return;
   cv::Size size = cnt_img.size();
@@ -189,6 +210,7 @@ cv::Mat create_finger_histogram(cv::Mat original_frame, cv::Size size){
   for(int row = 0; row < size.height; row++)
     for(int col = 0; col < size.width; col++)
       finger_hist.at<cv::Vec3b>(row, col) = original_frame.at<cv::Vec3b>(row + last_mouse_click_y, col + last_mouse_click_x);
+  createHistogram(finger_hist);
   //FROM opencv documentation:
   int channels[] = {0 ,1, 2};
   int hbins = 15, sbins = 16, vbins = 10;
@@ -322,6 +344,7 @@ int main(){
   cv::copyTo(ref, labeled, cv::Mat());
   kmeans = applyKmeansClustering(ref, 3, .1);
   kmeans.convertTo(kmeans, CV_8U);
+  cv::imshow("kmeans", kmeans);
   gamma_adjusted_ref = preprocess(kmeans);
 
   cv::Canny(gamma_adjusted_ref, edges, 30, 200, 5);
@@ -383,10 +406,10 @@ int main(){
     cv::imshow("annotated_frame", annotated_frame);
     cv::imshow("original_frame", original_frame);
     int finger_id = determine_finger(mask2, keypress, 50, 1000000, 150, true);
-    cout << "Number of blobs " << finger_id << endl;
     finger_id = finger_id % 8;
     if(quote[typed_index] == keypress){
       typed += quote[typed_index];
+      cout << "Finger: " << print_finger(finger_id) << endl;
       if(finger_id == keyToFinger[quote[typed_index]]){
         correct++;
       }
